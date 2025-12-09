@@ -1,5 +1,55 @@
+# Dependencies
 node_modules/
+
+# Build output
 build/
+dist/
+
+# System files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
 *.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test output
 test_*.json
+
+# Claude Code configuration (NEVER version)
+.claude/
+CLAUDE.md
+CLAUDE-GLOBAL.md
+CLAUDE-PROJECT.md
+
+# Specify configuration (NEVER version)
+.specify/
+
+# Serena MCP configuration (NEVER version)
+.serena/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vscode-test/
+*.code-workspace
+
+# OS specific
+.AppleDouble
+.LSOverride
