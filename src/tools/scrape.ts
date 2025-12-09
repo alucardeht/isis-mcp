@@ -1,71 +1,78 @@
-import * as cheerio from "cheerio";
-import { chromium } from "playwright";
+import { scrapePage } from "../lib/scraper.js";
+import { extractContent } from "../lib/extractor.js";
+import { getFromCache, saveToCache } from "../lib/cache.js";
+import { JSDOM } from "jsdom";
 
 interface ScrapeParams {
   url: string;
   selector?: string;
-  waitFor?: string;
-  javascript: boolean;
+  javascript?: boolean;
+  timeout?: number;
 }
 
 interface ScrapeResult {
   url: string;
   title: string;
   content: string;
-  html?: string;
-  selectedElement?: string;
-  metadata: {
-    description?: string;
-    keywords?: string;
-    author?: string;
-    ogImage?: string;
-  };
-  scrapedAt: string;
+  markdown: string;
+  selectedContent?: string;
+  fromCache: boolean;
+  timestamp: string;
 }
 
-export async function scrapePage(params: ScrapeParams): Promise<ScrapeResult> {
-  const { url, selector, waitFor, javascript } = params;
+export async function scrape(params: ScrapeParams): Promise<ScrapeResult> {
+  const { url, selector, javascript = false, timeout = 30000 } = params;
 
-  let html: string;
+  const cached = getFromCache(url);
+  if (cached && !selector) {
+    return {
+      url,
+      title: cached.title,
+      content: cached.content,
+      markdown: cached.markdown,
+      fromCache: true,
+      timestamp: new Date(cached.cached_at).toISOString(),
+    };
+  }
 
-  if (javascript) {
-    const browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "networkidle" });
+  try {
+    const { html } = await scrapePage(url, { javascript, timeout });
+    const extracted = await extractContent(html, url);
 
-    if (waitFor) {
-      await page.waitForSelector(waitFor, { timeout: 10000 }).catch(() => {});
+    if (!extracted) {
+      throw new Error("Failed to extract content");
     }
 
-    html = await page.content();
-    await browser.close();
-  } else {
-    const response = await fetch(url);
-    html = await response.text();
+    if (!cached) {
+      saveToCache(url, {
+        content: extracted.textContent,
+        markdown: extracted.markdown,
+        title: extracted.title,
+      });
+    }
+
+    let selectedContent: string | undefined;
+    if (selector) {
+      try {
+        const dom = new JSDOM(html, { url });
+        const element = dom.window.document.querySelector(selector);
+        selectedContent = element ? element.textContent || undefined : undefined;
+      } catch (e) {
+        console.error("Selector error:", e);
+      }
+    }
+
+    return {
+      url,
+      title: extracted.title,
+      content: extracted.textContent,
+      markdown: extracted.markdown,
+      selectedContent,
+      fromCache: false,
+      timestamp: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("Scrape error:", error);
+    throw error;
   }
-
-  const $ = cheerio.load(html);
-
-  $("script, style, noscript, iframe").remove();
-
-  const result: ScrapeResult = {
-    url,
-    title: $("title").text().trim(),
-    content: $("body").text().replace(/\s+/g, " ").trim().slice(0, 10000),
-    metadata: {
-      description: $('meta[name="description"]').attr("content"),
-      keywords: $('meta[name="keywords"]').attr("content"),
-      author: $('meta[name="author"]').attr("content"),
-      ogImage: $('meta[property="og:image"]').attr("content"),
-    },
-    scrapedAt: new Date().toISOString(),
-  };
-
-  if (selector) {
-    const selected = $(selector);
-    result.selectedElement = selected.text().trim();
-    result.html = selected.html() || undefined;
-  }
-
-  return result;
 }

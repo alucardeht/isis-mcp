@@ -2,9 +2,9 @@ import { chromium } from "playwright";
 
 interface ScreenshotParams {
   url: string;
-  fullPage: boolean;
-  width: number;
-  height: number;
+  fullPage?: boolean;
+  width?: number;
+  height?: number;
 }
 
 interface ScreenshotResult {
@@ -12,36 +12,43 @@ interface ScreenshotResult {
   base64: string;
   width: number;
   height: number;
-  capturedAt: string;
+  timestamp: string;
 }
 
-export async function takeScreenshot(params: ScreenshotParams): Promise<ScreenshotResult> {
-  const { url, fullPage, width, height } = params;
+export async function screenshot(
+  params: ScreenshotParams
+): Promise<ScreenshotResult> {
+  const { url, fullPage = false, width = 1920, height = 1080 } = params;
 
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-
-  await page.setViewportSize({ width, height });
-  await page.goto(url, { waitUntil: "networkidle" });
-  await page.waitForTimeout(1000);
-
-  const screenshot = await page.screenshot({
-    fullPage,
-    type: "png",
+  const page = await browser.newPage({
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
   });
 
-  const dimensions = await page.evaluate(() => ({
-    width: document.documentElement.scrollWidth,
-    height: document.documentElement.scrollHeight,
-  }));
+  try {
+    await page.setViewportSize({ width, height });
+    await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
+    await page.waitForTimeout(1000);
 
-  await browser.close();
+    const screenshotBuffer = await page.screenshot({
+      fullPage,
+      type: "png",
+    });
 
-  return {
-    url,
-    base64: screenshot.toString("base64"),
-    width: fullPage ? dimensions.width : width,
-    height: fullPage ? dimensions.height : height,
-    capturedAt: new Date().toISOString(),
-  };
+    const dimensions = await page.evaluate(() => ({
+      width: document.documentElement.scrollWidth,
+      height: document.documentElement.scrollHeight,
+    }));
+
+    return {
+      url,
+      base64: screenshotBuffer.toString("base64"),
+      width: fullPage ? dimensions.width : width,
+      height: fullPage ? dimensions.height : height,
+      timestamp: new Date().toISOString(),
+    };
+  } finally {
+    await browser.close();
+  }
 }

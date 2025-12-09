@@ -98,7 +98,8 @@ O main agent **NUNCA** faz diretamente:
 
 | MCP | Use For |
 |-----|---------|
-| Serena | Code navigation, symbols, memories (NOT editing) |
+| May-la | Code navigation, file ops, symbols, references, memory |
+| May-la | Spec-driven workflow (constitution → spec → plan → tasks) |
 | Sequential Thinking | Multi-step reasoning, complex planning |
 | Context7 | Library docs verification |
 | Figma | Design system access |

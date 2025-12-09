@@ -1,7 +1,7 @@
 {
   "name": "isis-mcp",
-  "version": "1.0.0",
-  "description": "MCP Server for web scraping - Apify-like functionality for Claude",
+  "version": "2.0.0",
+  "description": "MCP Server for web scraping - Apify RAG Web Browser equivalent functionality",
   "repository": "github:alucardeht/isis-mcp",
   "type": "module",
   "main": "build/index.js",
@@ -20,7 +20,7 @@
     "mcp",
     "claude",
     "web-scraping",
-    "crawler",
+    "rag",
     "apify",
     "model-context-protocol"
   ],
@@ -28,12 +28,19 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "cheerio": "^1.0.0",
+    "@mozilla/readability": "^0.5.0",
+    "better-sqlite3": "^11.7.0",
+    "duck-duck-scrape": "^2.2.7",
+    "jsdom": "^25.0.0",
     "playwright": "^1.49.1",
+    "turndown": "^7.2.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/jsdom": "^27.0.0",
     "@types/node": "^22.10.2",
+    "@types/turndown": "^5.0.5",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   },

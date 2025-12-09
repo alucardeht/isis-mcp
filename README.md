@@ -1,8 +1,8 @@
 # ISIS MCP
 
-MCP Server para web scraping local. Inspirado no Apify, mas sem necessidade de API keys ou configuração externa.
+MCP Server para web scraping local com RAG. Inspirado no Apify RAG Web Browser, mas sem necessidade de API keys.
 
-## Instalação
+## Instalacao
 
 ### Via Claude Code CLI
 
@@ -10,12 +10,12 @@ MCP Server para web scraping local. Inspirado no Apify, mas sem necessidade de A
 claude mcp add isis-mcp -- npx -y github:alucardeht/isis-mcp
 ```
 
-Para instalação global (usuário):
+Para instalacao global (usuario):
 ```bash
 claude mcp add -s user isis-mcp -- npx -y github:alucardeht/isis-mcp
 ```
 
-### Configuração Manual
+### Configuracao Manual
 
 Adicione ao seu `claude_desktop_config.json`:
 
@@ -30,84 +30,67 @@ Adicione ao seu `claude_desktop_config.json`:
 }
 ```
 
-## Ferramentas Disponíveis
+## Ferramentas Disponiveis
+
+### rag (Principal)
+Busca web com extracao inteligente de conteudo. Funciona igual ao Apify RAG Web Browser:
+1. Busca no Brave Search
+2. Extrai conteudo das paginas encontradas em paralelo
+3. Converte para Markdown usando Mozilla Readability
+4. Retorna resultado estruturado com cache
+
+**Parametros:**
+- `query` (obrigatorio): Termo de busca
+- `maxResults` (opcional): Maximo de paginas (1-10, default: 5)
+- `outputFormat` (opcional): `markdown` | `text` | `html` (default: markdown)
+- `useJavascript` (opcional): Renderizar JS com Playwright (default: false)
+
+**Exemplo:**
+```
+Pesquise sobre "nodejs best practices" e me de um resumo
+```
 
 ### scrape
-Extrai conteúdo de uma página web.
+Extrai conteudo de uma URL especifica.
 
-**Parâmetros:**
-- `url` (obrigatório): URL da página
-- `selector` (opcional): Seletor CSS para elemento específico
-- `javascript` (opcional): Renderizar JavaScript (usa Playwright)
-
-**Exemplo:**
-```
-Extraia o título principal de https://example.com
-```
-
-### crawl
-Navega por múltiplas páginas seguindo links.
-
-**Parâmetros:**
-- `url` (obrigatório): URL inicial
-- `maxPages` (opcional): Máximo de páginas (default: 10, max: 100)
-- `pattern` (opcional): Regex para filtrar URLs
-- `sameDomain` (opcional): Apenas links do mesmo domínio (default: true)
+**Parametros:**
+- `url` (obrigatorio): URL da pagina
+- `selector` (opcional): Seletor CSS para elemento especifico
+- `javascript` (opcional): Renderizar JavaScript
 
 **Exemplo:**
 ```
-Faça crawl de https://docs.example.com coletando até 20 páginas
+Extraia o conteudo principal de https://nodejs.org/en/learn
 ```
 
 ### screenshot
-Captura screenshot de uma página.
+Captura screenshot de uma pagina.
 
-**Parâmetros:**
-- `url` (obrigatório): URL da página
-- `fullPage` (opcional): Capturar página inteira (default: false)
+**Parametros:**
+- `url` (obrigatorio): URL da pagina
+- `fullPage` (opcional): Capturar pagina inteira (default: false)
 - `width` (opcional): Largura do viewport (default: 1920)
 - `height` (opcional): Altura do viewport (default: 1080)
 
 **Exemplo:**
 ```
-Tire um screenshot de https://example.com em tela cheia
+Tire um screenshot de https://example.com
 ```
 
-### extract
-Extrai dados estruturados de uma página.
+## Arquitetura
 
-**Parâmetros:**
-- `url` (obrigatório): URL da página
-- `schema` (obrigatório): Tipo de extração
-  - `article`: Título, autor, data, conteúdo
-  - `product`: Nome, preço, descrição, imagens
-  - `contact`: Emails, telefones, endereços
-  - `links`: Todos os links da página
-  - `images`: Todas as imagens
-  - `meta`: Metadados (og:, twitter:, etc)
-  - `all`: Todos os schemas
-
-**Exemplo:**
 ```
-Extraia os links de https://example.com
-```
-
-### search
-Realiza busca web.
-
-**Parâmetros:**
-- `query` (obrigatório): Termo de busca
-- `maxResults` (opcional): Máximo de resultados (default: 10)
-
-**Exemplo:**
-```
-Busque por "web scraping best practices"
+ISIS MCP v2.0
+├── Busca (Brave Search via Playwright)
+├── Extracao (Mozilla Readability + Turndown)
+├── Cache (SQLite em ~/.isis-mcp-cache.db)
+└── Processamento paralelo
 ```
 
 ## Requisitos
 
 - Node.js 20+
-- Playwright (instalado automaticamente)
+- Playwright Chromium (instalado automaticamente)
 
 ## Desenvolvimento Local
 
@@ -124,6 +107,6 @@ Para testar:
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node build/index.js
 ```
 
-## Licença
+## Licenca
 
 MIT
