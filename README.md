@@ -119,6 +119,188 @@ The server uses a modular architecture where each component can be extended inde
 - Node.js 20 or higher
 - Playwright Chromium (installed automatically during setup)
 
+## Token Optimization Features
+
+The RAG tool has been enhanced with progressive token optimization to handle large content efficiently.
+
+### Phase 1: Content Modes
+
+Control how much content is returned per result:
+
+```typescript
+// Preview mode - Truncate to ~300 characters (70-80% reduction)
+await rag({
+  query: "react hooks",
+  contentMode: "preview"
+})
+
+// Full mode - Complete content (default, backward compatible)
+await rag({
+  query: "react hooks",
+  contentMode: "full"
+})
+
+// Summary mode - Intelligent LLM summarization (Phase 3)
+await rag({
+  query: "react hooks",
+  contentMode: "summary"
+})
+```
+
+**Benefits:**
+- `preview`: Fast, compact results (~6k tokens vs ~20k)
+- `full`: Complete content (original behavior)
+- `summary`: Intelligent 150-200 word summaries via LLM
+
+### Phase 2: Deferred Content Fetching
+
+Fetch full content after preview using content handles:
+
+```typescript
+// Step 1: Get preview with handle
+const preview = await rag({
+  query: "react hooks",
+  contentMode: "preview",
+  maxResults: 5
+})
+
+// Each result includes contentHandle (BASE64 of URL)
+const handle = preview.results[0].contentHandle
+
+// Step 2: Fetch full content when needed
+const full = await fetchFullContent({
+  contentHandle: handle,
+  outputFormat: "markdown"
+})
+// Returns: Complete content from cache (1-hour TTL)
+```
+
+**Benefits:**
+- Lazy loading: Only fetch what you need
+- Cache reuse: No re-scraping required
+- Deterministic handles: Same URL = same handle
+
+### Phase 3: Progressive Summarization
+
+Intelligent content summarization using local Ollama LLM.
+
+#### Setup (Optional - Zero Config)
+
+1. Install Ollama (if not already):
+```bash
+# macOS/Linux
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Or download from https://ollama.ai
+```
+
+2. Pull a model (recommended):
+```bash
+ollama pull llama3.2:1b  # Fast, good quality (1.3GB)
+# or
+ollama pull mistral:7b   # Premium quality, slower (4GB)
+```
+
+3. Start Ollama (if not running):
+```bash
+ollama serve
+```
+
+#### Usage
+
+**Basic summarization (auto-detection):**
+```typescript
+const result = await rag({
+  query: "react hooks best practices",
+  contentMode: "summary"
+})
+// Auto-detects Ollama, uses llama3.2:1b by default
+// Falls back to truncation if Ollama unavailable
+```
+
+**Custom model:**
+```typescript
+const result = await rag({
+  query: "python async patterns",
+  contentMode: "summary",
+  summaryModel: "mistral:7b"
+})
+```
+
+**Configuration via environment variables:**
+```bash
+export OLLAMA_ENDPOINT=http://localhost:11434  # Default
+export OLLAMA_MODEL=llama3.2:1b               # Default
+export OLLAMA_TIMEOUT=30000                    # Default 30s
+```
+
+#### Fallback Behavior
+
+- ✅ Ollama unavailable → Automatic fallback to truncation
+- ✅ Model doesn't exist → Try default, then truncate
+- ✅ Timeout → Fallback to truncation
+- ✅ Zero configuration required - works out of the box
+
+#### Recommended Models
+
+| Model | Size | Speed | Quality | Use Case |
+|-------|------|-------|---------|----------|
+| `llama3.2:1b` | 1.3GB | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ✅ Recommended (default) |
+| `qwen2.5:0.5b` | 400MB | ⭐⭐⭐⭐⭐ | ⭐⭐ | Ultra-fast, lighter quality |
+| `mistral:7b` | 4GB | ⭐⭐⭐ | ⭐⭐⭐⭐ | Premium quality |
+
+### Performance Comparison
+
+| Mode | Avg Tokens | Latency | Use Case |
+|------|-----------|---------|----------|
+| `full` | ~20,000 | 3-5s | Complete research |
+| `preview` | ~6,000 | 3-5s | Quick scanning |
+| `summary` | ~1,500 | 4-8s* | Intelligent digests |
+
+\* With Ollama. Falls back to `preview` performance if unavailable.
+
+### Examples
+
+**Research workflow:**
+```typescript
+// 1. Quick scan with previews
+const preview = await rag({
+  query: "Next.js 14 features",
+  contentMode: "preview",
+  maxResults: 10
+})
+
+// 2. Get intelligent summary of top result
+const summary = await rag({
+  query: "Next.js 14 features",
+  contentMode: "summary",
+  maxResults: 1
+})
+
+// 3. Fetch full content for deep dive
+const full = await fetchFullContent({
+  contentHandle: preview.results[0].contentHandle
+})
+```
+
+**Troubleshooting:**
+
+Q: Summarization seems slow?
+```bash
+# Use faster model
+ollama pull qwen2.5:0.5b
+export OLLAMA_MODEL=qwen2.5:0.5b
+```
+
+Q: Getting truncated results instead of summaries?
+```bash
+# Check if Ollama is running
+curl http://localhost:11434/api/tags
+
+# If not running, start it
+ollama serve
+```
+
 ## Local Development
 
 ### Clone and Setup
