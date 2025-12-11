@@ -1,0 +1,1 @@
+{"version":3,"file":"summarizer.d.ts","sourceRoot":"","sources":["../../src/lib/summarizer.ts"],"names":[],"mappings":"AAEA,UAAU,gBAAgB;IACxB,KAAK,CAAC,EAAE,MAAM,CAAC;IACf,cAAc,CAAC,EAAE,MAAM,CAAC;CACzB;AAED,qBAAa,gBAAgB;IAC3B,OAAO,CAAC,MAAM,CAAc;IAC5B,OAAO,CAAC,cAAc,CAAS;gBAEnB,MAAM,GAAE,gBAAqB;IAOnC,SAAS,CAAC,OAAO,EAAE,MAAM,GAAG,OAAO,CAAC,MAAM,GAAG,IAAI,CAAC;CAczD"}
