@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { rag } from "./tools/rag.js";
+import { fetchFullContent } from "./tools/fetch.js";
 import { scrape } from "./tools/scrape.js";
 import { screenshot } from "./tools/screenshot.js";
 import { closeCache } from "./lib/cache.js";
@@ -31,6 +32,10 @@ server.tool(
       .enum(["markdown", "text", "html"])
       .default("markdown")
       .describe("Formato de saída do conteúdo"),
+    contentMode: z
+      .enum(["preview", "full"])
+      .default("full")
+      .describe("Modo de conteúdo: preview=resumo truncado (~300 chars), full=conteúdo completo"),
     useJavascript: z
       .boolean()
       .default(false)
@@ -43,6 +48,27 @@ server.tool(
   },
   async (params) => {
     const result = await rag(params);
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+server.tool(
+  "fetchFullContent",
+  "Busca conteúdo completo de um resultado anterior de RAG obtido em contentMode=preview",
+  {
+    contentHandle: z
+      .string()
+      .min(1)
+      .describe("Handle do conteúdo obtido em contentMode=preview da ferramenta rag"),
+    outputFormat: z
+      .enum(["markdown", "text", "html"])
+      .default("markdown")
+      .describe("Formato de saída do conteúdo"),
+  },
+  async (params) => {
+    const result = await fetchFullContent(params);
     return {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
     };

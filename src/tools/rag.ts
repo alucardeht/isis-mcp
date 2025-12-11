@@ -1,12 +1,13 @@
 import { searchWeb } from "../lib/search.js";
 import { scrapePage } from "../lib/scraper.js";
 import { extractContent } from "../lib/extractor.js";
-import { getFromCache, saveToCache } from "../lib/cache.js";
+import { getFromCache, saveToCache, generateContentHandle } from "../lib/cache.js";
 
 interface RagParams {
   query: string;
   maxResults?: number;
   outputFormat?: "markdown" | "text" | "html";
+  contentMode?: "preview" | "full";
   useJavascript?: boolean;
   timeout?: number;
 }
@@ -18,6 +19,7 @@ interface PageResult {
   text?: string;
   html?: string;
   excerpt?: string;
+  contentHandle?: string;
   fromCache: boolean;
 }
 
@@ -29,11 +31,17 @@ interface RagResult {
   error?: string;
 }
 
+function truncateForPreview(content: string | undefined, maxChars = 300): string | undefined {
+  if (!content || content.length <= maxChars) return content;
+  return content.substring(0, maxChars) + "...";
+}
+
 export async function rag(params: RagParams): Promise<RagResult> {
   const {
     query,
     maxResults = 5,
     outputFormat = "markdown",
+    contentMode = "full",
     useJavascript = false,
     timeout = 30000,
   } = params;
@@ -111,15 +119,25 @@ export async function rag(params: RagParams): Promise<RagResult> {
       fromCache: p.fromCache,
     };
 
-    if (outputFormat === "markdown") {
-      result.markdown = p.markdown;
-    } else if (outputFormat === "text") {
-      result.text = p.text;
-    } else if (outputFormat === "html") {
-      result.html = p.html;
+    if (contentMode === "preview") {
+      result.contentHandle = generateContentHandle(p.url);
     }
 
-    if (p.excerpt) {
+    if (outputFormat === "markdown") {
+      result.markdown = contentMode === "preview"
+        ? truncateForPreview(p.markdown)
+        : p.markdown;
+    } else if (outputFormat === "text") {
+      result.text = contentMode === "preview"
+        ? truncateForPreview(p.text)
+        : p.text;
+    } else if (outputFormat === "html") {
+      result.html = contentMode === "preview"
+        ? truncateForPreview(p.html)
+        : p.html;
+    }
+
+    if (p.excerpt && contentMode === "full") {
       result.excerpt = p.excerpt;
     }
 

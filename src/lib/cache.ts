@@ -66,3 +66,15 @@ export function closeCache(): void {
     db = null;
   }
 }
+
+export function generateContentHandle(url: string): string {
+  return Buffer.from(url).toString('base64');
+}
+
+export function decodeContentHandle(handle: string): string | null {
+  try {
+    return Buffer.from(handle, 'base64').toString('utf-8');
+  } catch (error) {
+    return null;
+  }
+}
