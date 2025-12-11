@@ -33,9 +33,13 @@ server.tool(
       .default("markdown")
       .describe("Formato de saída do conteúdo"),
     contentMode: z
-      .enum(["preview", "full"])
+      .enum(["preview", "full", "summary"])
       .default("full")
-      .describe("Modo de conteúdo: preview=resumo truncado (~300 chars), full=conteúdo completo"),
+      .describe("Modo de conteúdo: preview=resumo truncado (~300 chars), full=conteúdo completo, summary=sumarização inteligente via LLM"),
+    summaryModel: z
+      .string()
+      .optional()
+      .describe("Modelo Ollama para sumarização (default: llama3.2:1b). Ex: mistral:7b, qwen2.5:0.5b"),
     useJavascript: z
       .boolean()
       .default(false)
