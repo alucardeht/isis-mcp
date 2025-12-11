@@ -8,6 +8,7 @@ import { fetchFullContent } from "./tools/fetch.js";
 import { scrape } from "./tools/scrape.js";
 import { screenshot } from "./tools/screenshot.js";
 import { closeCache } from "./lib/cache.js";
+import { bootstrapOllama, shutdownOllama } from "./lib/bootstrap.js";
 
 const server = new McpServer({
   name: "isis-mcp",
@@ -147,7 +148,27 @@ server.tool(
 );
 
 const transport = new StdioServerTransport();
+
+await bootstrapOllama({
+  autoInstall: true,
+  verbose: true,
+});
+
 await server.connect(transport);
+
+process.on("SIGTERM", async () => {
+  console.log("Received SIGTERM, shutting down gracefully...");
+  await shutdownOllama();
+  closeCache();
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  console.log("Received SIGINT, shutting down gracefully...");
+  await shutdownOllama();
+  closeCache();
+  process.exit(0);
+});
 
 process.on("exit", () => {
   closeCache();
