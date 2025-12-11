@@ -20,7 +20,7 @@ export class LlamaEngine {
   private isDownloading: boolean = false;
 
   private constructor(config: LlamaEngineConfig = {}) {
-    this.modelName = config.modelName || 'llama-3.2-1b-instruct-q4_k_m.gguf';
+    this.modelName = config.modelName || 'Llama-3.2-1B-Instruct-Q4_K_M.gguf';
     this.cacheDir = config.cacheDir || join(homedir(), '.cache', 'isis-mcp');
     this.modelPath = join(this.cacheDir, this.modelName);
     this.maxTokens = config.maxTokens || 250;
