@@ -13,7 +13,67 @@ An open-source MCP (Model Context Protocol) server for local web scraping with R
 
 ## Installation
 
-### Via Claude Code CLI
+### Step 1: Install Globally
+
+```bash
+npm install -g isis-mcp
+```
+
+### Step 2: Register with Claude Code
+
+```bash
+claude mcp install isis-mcp -s user
+```
+
+This registers the MCP in user scope (available across all projects).
+
+**Important:** Restart Claude Code after installation.
+
+### Step 3: Configure Search Providers (Choose ONE Option)
+
+The isis-mcp uses fallback search providers. Configure at least one:
+
+#### Option A: SearXNG Local (Recommended - Fastest)
+
+**Via Docker:**
+```bash
+docker run -d -p 8080:8080 searxng/searxng
+```
+
+**Verify it's running:**
+```bash
+curl http://localhost:8080/search?q=test&format=json
+```
+
+Once running, isis-mcp automatically detects and uses it.
+
+#### Option B: ScraperAPI (Recommended - Most Reliable)
+
+1. Create account at [ScraperAPI](https://www.scraperapi.com)
+2. Set environment variable:
+
+```bash
+export SCRAPER_API_KEY="your-key-here"
+```
+
+**Make it permanent (add to ~/.zshrc or ~/.bashrc):**
+```bash
+echo 'export SCRAPER_API_KEY="your-key-here"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+#### Option C: Public SearXNG Instances (Fallback Only)
+
+Without additional configuration, isis-mcp uses public instances:
+- https://searx.be
+- https://search.bus-hit.me
+- https://searx.tiekoetter.com
+
+⚠️ **Warning:** May fail due to overload or rate-limiting.
+
+### Alternative: Via Claude Code CLI (Legacy)
+
+If you prefer npx-based installation:
 
 ```bash
 claude mcp add isis-mcp -- npx -y github:alucardeht/isis-mcp
@@ -39,6 +99,38 @@ Add the following to your `claude_desktop_config.json`:
   }
 }
 ```
+
+## Troubleshooting Installation
+
+### "All search providers failed"
+
+**Cause:** No provider configured or available.
+
+**Solution:**
+1. Configure SearXNG Local (Option A) OR ScraperAPI (Option B)
+2. Verify service is running: `curl http://localhost:8080/search?q=test&format=json`
+3. If using ScraperAPI, confirm env var: `echo $SCRAPER_API_KEY`
+
+### Slow Performance
+
+**Global vs npx comparison:**
+
+| Method | Startup | Cache | Re-download | Recommended |
+|--------|---------|-------|-------------|-------------|
+| `npx isis-mcp` | ~1-3s | NPX cache | Yes (3-7 days) | ❌ |
+| `npm install -g` | ~240ms | Persistent | Never | ✅ |
+
+If still slow:
+- Is SearXNG Local running?
+- Is ScraperAPI key configured?
+- Are public instances overloaded?
+
+### Claude Code Not Detecting MCP
+
+1. Verify installation: `npm list -g isis-mcp`
+2. Restart Claude Code completely
+3. Check MCP status: `claude mcp list` (if available)
+4. Re-run: `claude mcp install isis-mcp -s user`
 
 ## Available Tools
 
