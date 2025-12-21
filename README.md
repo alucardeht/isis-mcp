@@ -4,7 +4,7 @@ An open-source MCP (Model Context Protocol) server for local web scraping with R
 
 ## Features
 
-- **RAG Tool**: Intelligent web search with content extraction (Brave Search + Mozilla Readability + Markdown conversion)
+- **RAG Tool**: Intelligent web search with content extraction (Multi-provider fallback (DuckDuckGo → SearXNG → ScraperAPI) + Mozilla Readability + Markdown conversion)
 - **Scrape Tool**: Extract content from specific URLs with optional CSS selectors
 - **Screenshot Tool**: Capture visual snapshots of web pages
 - **SQLite Caching**: Persistent cache to avoid redundant requests
@@ -29,25 +29,48 @@ This registers the MCP in user scope (available across all projects).
 
 **Important:** Restart Claude Code after installation.
 
-### Step 3: Configure Search Providers (Choose ONE Option)
+### Step 3: Search Providers (Auto-configured)
 
-The isis-mcp uses fallback search providers. Configure at least one:
+ISIS-MCP uses an **automatic fallback chain** - no configuration needed:
 
-#### Option A: SearXNG Local (Recommended - Fastest)
+| Priority | Provider | Config Required | Notes |
+|----------|----------|-----------------|-------|
+| 1 | DuckDuckGo | None | Primary, always available |
+| 2 | SearXNG Local | Docker installed | Auto-starts container on first use |
+| 3 | ScraperAPI | `SCRAPER_API_KEY` env var | Optional paid fallback |
+| 4 | Public SearXNG | None | Free but slower/unreliable |
 
-**Via Docker:**
+#### Option A: Docker SearXNG (Recommended)
+
+Just have Docker installed - ISIS-MCP handles the rest:
+
 ```bash
-docker run -d -p 8080:8080 searxng/searxng
+# Verify Docker is installed
+docker --version
+
+# That's it! On first RAG request, ISIS-MCP will:
+# 1. Create container "isis-searxng"
+# 2. Mount custom config (docker/searxng/settings.yml)
+# 3. Start on port 8080
+# 4. Wait for ready state
 ```
 
-**Verify it's running:**
+**Manual commands:**
 ```bash
-curl http://localhost:8080/search?q=test&format=json
+# Check status
+docker ps | grep isis-searxng
+
+# View logs
+docker logs isis-searxng
+
+# Restart
+docker restart isis-searxng
+
+# Remove (will auto-recreate on next use)
+docker rm -f isis-searxng
 ```
 
-Once running, isis-mcp automatically detects and uses it.
-
-#### Option B: ScraperAPI (Recommended - Most Reliable)
+#### Option B: ScraperAPI (Optional - Paid Fallback)
 
 1. Create account at [ScraperAPI](https://www.scraperapi.com)
 2. Set environment variable:
@@ -61,15 +84,6 @@ export SCRAPER_API_KEY="your-key-here"
 echo 'export SCRAPER_API_KEY="your-key-here"' >> ~/.zshrc
 source ~/.zshrc
 ```
-
-#### Option C: Public SearXNG Instances (Fallback Only)
-
-Without additional configuration, isis-mcp uses public instances:
-- https://searx.be
-- https://search.bus-hit.me
-- https://searx.tiekoetter.com
-
-⚠️ **Warning:** May fail due to overload or rate-limiting.
 
 ### Alternative: Via Claude Code CLI (Legacy)
 
@@ -138,7 +152,7 @@ If still slow:
 
 Web search with intelligent content extraction. Works like Apify RAG Web Browser:
 
-1. Search via Brave Search
+1. Search via multi-provider fallback (DuckDuckGo → SearXNG → ScraperAPI → Public instances)
 2. Extract content from discovered pages in parallel
 3. Convert to Markdown using Mozilla Readability
 4. Return structured result with caching
@@ -192,8 +206,9 @@ Take a screenshot of https://example.com
 ## Architecture
 
 ```
-ISIS MCP v2.0
-├── Search (Brave Search via Playwright)
+ISIS MCP v3.0
+├── Search (Multi-provider fallback chain)
+├── Docker Auto-Start (SearXNG local container)
 ├── Extraction (Mozilla Readability + Turndown)
 ├── Caching (SQLite at ~/.isis-mcp-cache.db)
 └── Parallel Processing
@@ -201,15 +216,37 @@ ISIS MCP v2.0
 
 The server uses a modular architecture where each component can be extended independently:
 
-- **Search Module**: Integrates with Brave Search for reliable web discovery
+- **Search Module**: Multi-provider fallback chain (DuckDuckGo → SearXNG → ScraperAPI → Public instances)
+- **Docker Integration**: Automatic SearXNG container management on port 8080
 - **Extraction Module**: Uses Mozilla Readability for intelligent content parsing and Turndown for HTML-to-Markdown conversion
 - **Cache Layer**: SQLite-based persistent cache to minimize redundant requests
 - **Processing Pipeline**: Parallel extraction of multiple pages for improved performance
 
 ## Requirements
 
-- Node.js 20 or higher
-- Playwright Chromium (installed automatically during setup)
+- **Node.js 20+** - Required
+- **Docker** (recommended) - For local SearXNG. Auto-starts on first use. Fallback providers work without Docker.
+- Playwright Chromium - Installed automatically
+
+## Search Fallback Chain
+
+ISIS-MCP automatically tries providers in order until one succeeds:
+
+```
+DuckDuckGo (Primary)
+    ↓ if fails
+SearXNG Local (Docker container on port 8080)
+    ↓ if fails
+ScraperAPI (if SCRAPER_API_KEY configured)
+    ↓ if fails
+Public SearXNG Instances (7 fallback servers)
+```
+
+**Features:**
+- Exponential backoff on rate limits
+- User-agent rotation for reliability
+- Automatic Docker container management
+- Graceful degradation to public instances
 
 ## Token Optimization Features
 
