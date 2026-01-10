@@ -23,7 +23,7 @@ interface ScrapeResult {
 export async function scrape(params: ScrapeParams): Promise<ScrapeResult> {
   const { url, selector, javascript = false, timeout = 30000 } = params;
 
-  const cached = getFromCache(url);
+  const cached = await getFromCache(url);
   if (cached && !selector) {
     return {
       url,
@@ -44,7 +44,7 @@ export async function scrape(params: ScrapeParams): Promise<ScrapeResult> {
     }
 
     if (!cached) {
-      saveToCache(url, {
+      await saveToCache(url, {
         content: extracted.textContent,
         markdown: extracted.markdown,
         title: extracted.title,

@@ -97,7 +97,7 @@ export async function rag(params: RagParams): Promise<RagResult> {
 
   const pages = await Promise.all(
     searchResults.map(async (result) => {
-      const cached = getFromCache(result.url);
+      const cached = await getFromCache(result.url);
       if (cached) {
         return {
           url: result.url,
@@ -118,7 +118,7 @@ export async function rag(params: RagParams): Promise<RagResult> {
         const extracted = await extractContent(html, result.url);
 
         if (extracted) {
-          saveToCache(result.url, {
+          await saveToCache(result.url, {
             content: extracted.textContent,
             markdown: extracted.markdown,
             title: extracted.title,

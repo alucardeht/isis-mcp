@@ -4,7 +4,7 @@ import { getFromCache, saveToCache } from "../lib/cache.js";
 import { JSDOM } from "jsdom";
 export async function scrape(params) {
     const { url, selector, javascript = false, timeout = 30000 } = params;
-    const cached = getFromCache(url);
+    const cached = await getFromCache(url);
     if (cached && !selector) {
         return {
             url,
@@ -22,7 +22,7 @@ export async function scrape(params) {
             throw new Error("Failed to extract content");
         }
         if (!cached) {
-            saveToCache(url, {
+            await saveToCache(url, {
                 content: extracted.textContent,
                 markdown: extracted.markdown,
                 title: extracted.title,

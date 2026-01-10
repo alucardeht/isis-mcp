@@ -30,7 +30,7 @@ export async function fetchFullContent(
     };
   }
 
-  const cached = getFromCache(url);
+  const cached = await getFromCache(url);
   if (!cached) {
     return {
       url,
