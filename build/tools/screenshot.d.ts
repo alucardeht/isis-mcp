@@ -3,6 +3,7 @@ interface ScreenshotParams {
     fullPage?: boolean;
     width?: number;
     height?: number;
+    timeout?: number;
 }
 interface ScreenshotResult {
     url: string;

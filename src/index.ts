@@ -8,6 +8,7 @@ import { fetchFullContent } from "./tools/fetch.js";
 import { scrape } from "./tools/scrape.js";
 import { screenshot } from "./tools/screenshot.js";
 import { closeCache } from "./lib/cache.js";
+import { runStartupChecks } from "./lib/startup.js";
 
 const server = new McpServer({
   name: "isis-mcp",
@@ -147,6 +148,8 @@ server.tool(
 );
 
 const transport = new StdioServerTransport();
+
+await runStartupChecks();
 
 await server.connect(transport);
 

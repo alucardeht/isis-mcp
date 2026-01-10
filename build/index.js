@@ -7,6 +7,7 @@ import { fetchFullContent } from "./tools/fetch.js";
 import { scrape } from "./tools/scrape.js";
 import { screenshot } from "./tools/screenshot.js";
 import { closeCache } from "./lib/cache.js";
+import { runStartupChecks } from "./lib/startup.js";
 const server = new McpServer({
     name: "isis-mcp",
     version: "2.0.0",
@@ -120,6 +121,7 @@ server.tool("screenshot", "Captura screenshot de uma página web", {
     };
 });
 const transport = new StdioServerTransport();
+await runStartupChecks();
 await server.connect(transport);
 process.on("SIGTERM", async () => {
     console.log("Received SIGTERM, shutting down gracefully...");

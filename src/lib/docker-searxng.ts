@@ -1,4 +1,4 @@
-import { exec } from "child_process";
+import { exec, execSync } from "child_process";
 import { promisify } from "util";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
@@ -10,6 +10,40 @@ const HEALTH_CHECK_TIMEOUT = 30000; // 30 segundos para container ficar ready
 
 function log(message: string): void {
   console.warn(`[Docker] ${message}`);
+}
+
+async function isDockerRunning(): Promise<boolean> {
+  try {
+    await execAsync("docker ps");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function tryStartDocker(): Promise<boolean> {
+  const platform = process.platform;
+  try {
+    if (platform === "darwin") {
+      log("Docker: Starting Docker Desktop...");
+      execSync("open -a Docker", { timeout: 5000 });
+      for (let i = 0; i < 15; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        if (await isDockerRunning()) {
+          log("Docker: Started successfully");
+          return true;
+        }
+      }
+    } else if (platform === "linux") {
+      log("Docker: Starting Docker service...");
+      execSync("sudo systemctl start docker", { timeout: 10000 });
+      await new Promise((r) => setTimeout(r, 3000));
+      return await isDockerRunning();
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 async function isDockerAvailable(): Promise<boolean> {
@@ -101,8 +135,11 @@ export async function ensureSearxngRunning(): Promise<boolean> {
 
   // 1. Verificar se Docker está disponível
   if (!(await isDockerAvailable())) {
-    log("Docker is not available");
-    return false;
+    log("Docker is not available. Attempting to start...");
+    if (!(await tryStartDocker())) {
+      log("Could not start Docker");
+      return false;
+    }
   }
 
   // 2. Se container já está rodando, verificar saúde

@@ -1,1 +1,1 @@
-{"version":3,"file":"docker-searxng.d.ts","sourceRoot":"","sources":["../../src/lib/docker-searxng.ts"],"names":[],"mappings":"AAkGA,wBAAsB,oBAAoB,IAAI,OAAO,CAAC,OAAO,CAAC,CA6B7D;AAED,wBAAsB,WAAW,IAAI,OAAO,CAAC,IAAI,CAAC,CAQjD;AAED,wBAAsB,aAAa,IAAI,OAAO,CAAC,IAAI,CAAC,CASnD"}
+{"version":3,"file":"docker-searxng.d.ts","sourceRoot":"","sources":["../../src/lib/docker-searxng.ts"],"names":[],"mappings":"AAoIA,wBAAsB,oBAAoB,IAAI,OAAO,CAAC,OAAO,CAAC,CAgC7D;AAED,wBAAsB,WAAW,IAAI,OAAO,CAAC,IAAI,CAAC,CAQjD;AAED,wBAAsB,aAAa,IAAI,OAAO,CAAC,IAAI,CAAC,CASnD"}
