@@ -3,6 +3,7 @@ import { scrapePage } from "../lib/scraper.js";
 import { extractContent } from "../lib/extractor.js";
 import { getFromCache, saveToCache, generateContentHandle } from "../lib/cache.js";
 import { OllamaSummarizer } from "../lib/summarizer.js";
+import { validateUrl, truncateContent, LIMITS } from "../lib/resource-guard.js";
 import pLimit from "p-limit";
 
 interface RagParams {
@@ -24,6 +25,8 @@ interface PageResult {
   excerpt?: string;
   contentHandle?: string;
   fromCache: boolean;
+  contentTruncated?: boolean;
+  originalLength?: number;
 }
 
 interface RagResult {
@@ -101,20 +104,31 @@ export async function rag(params: RagParams): Promise<RagResult> {
   const pages = await Promise.all(
     searchResults.map((result) =>
       scrapeLimiter(async () => {
+        const urlValidation = validateUrl(result.url);
+        if (!urlValidation.valid) {
+          console.warn(`[RAG] Skipping invalid URL: ${result.url} - ${urlValidation.error}`);
+          return null;
+        }
+
         const cached = await getFromCache(result.url);
         if (cached) {
+          const { content: truncatedMarkdown, truncated, originalLength } = truncateContent(
+            cached.markdown,
+            LIMITS.CONTENT_MAX_PER_PAGE
+          );
+
           return {
             url: result.url,
             title: cached.title,
-            markdown: cached.markdown,
+            markdown: truncatedMarkdown,
             text: cached.content,
             html: cached.content,
             excerpt: "",
             fromCache: true,
+            contentTruncated: truncated,
+            originalLength: truncated ? originalLength : undefined,
           };
         }
-
-        await new Promise((resolve) => setTimeout(resolve, 200));
 
         try {
           const { html } = await scrapePage(result.url, {
@@ -124,20 +138,27 @@ export async function rag(params: RagParams): Promise<RagResult> {
           const extracted = await extractContent(html, result.url);
 
           if (extracted) {
+            const { content: truncatedMarkdown, truncated, originalLength } = truncateContent(
+              extracted.markdown,
+              LIMITS.CONTENT_MAX_PER_PAGE
+            );
+
             await saveToCache(result.url, {
               content: extracted.textContent,
-              markdown: extracted.markdown,
+              markdown: truncatedMarkdown,
               title: extracted.title,
             });
 
             return {
               url: result.url,
               title: extracted.title,
-              markdown: extracted.markdown,
+              markdown: truncatedMarkdown,
               text: extracted.textContent,
               html: extracted.content,
               excerpt: extracted.excerpt,
               fromCache: false,
+              contentTruncated: truncated,
+              originalLength: truncated ? originalLength : undefined,
             };
           }
         } catch (e) {
@@ -151,24 +172,44 @@ export async function rag(params: RagParams): Promise<RagResult> {
   const validPages = pages.filter(Boolean) as PageResult[];
 
   const formattedResults: PageResult[] = [];
+  let totalContentLength = 0;
 
   for (const p of validPages) {
+    if (totalContentLength >= LIMITS.CONTENT_MAX_TOTAL) {
+      console.warn(`[RAG] Total content limit reached (${LIMITS.CONTENT_MAX_TOTAL} chars)`);
+      break;
+    }
+
     const result: any = {
       url: p.url,
       title: p.title,
       fromCache: p.fromCache,
+      contentTruncated: p.contentTruncated,
     };
+
+    if (p.originalLength !== undefined) {
+      result.originalLength = p.originalLength;
+    }
 
     if (contentMode === "preview") {
       result.contentHandle = generateContentHandle(p.url);
     }
 
+    let selectedContent: string | undefined;
+
     if (outputFormat === "markdown") {
-      result.markdown = await applyContentMode(p.markdown, contentMode, summaryModel);
+      selectedContent = await applyContentMode(p.markdown, contentMode, summaryModel);
+      result.markdown = selectedContent;
     } else if (outputFormat === "text") {
-      result.text = await applyContentMode(p.text, contentMode, summaryModel);
+      selectedContent = await applyContentMode(p.text, contentMode, summaryModel);
+      result.text = selectedContent;
     } else if (outputFormat === "html") {
-      result.html = await applyContentMode(p.html, contentMode, summaryModel);
+      selectedContent = await applyContentMode(p.html, contentMode, summaryModel);
+      result.html = selectedContent;
+    }
+
+    if (selectedContent) {
+      totalContentLength += selectedContent.length;
     }
 
     if (p.excerpt && contentMode === "full") {

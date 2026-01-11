@@ -16,6 +16,8 @@ interface PageResult {
     excerpt?: string;
     contentHandle?: string;
     fromCache: boolean;
+    contentTruncated?: boolean;
+    originalLength?: number;
 }
 interface RagResult {
     query: string;

@@ -7,7 +7,7 @@ import { fetchFullContent } from "./tools/fetch.js";
 import { scrape } from "./tools/scrape.js";
 import { screenshot } from "./tools/screenshot.js";
 import { closeCache } from "./lib/cache.js";
-import { runStartupChecks } from "./lib/startup.js";
+import { runStartupChecksAsync } from "./lib/startup.js";
 const server = new McpServer({
     name: "isis-mcp",
     version: "2.0.0",
@@ -74,7 +74,7 @@ server.tool("scrape", "Extrai conteúdo inteligente de uma URL específica", {
         .string()
         .optional()
         .describe("Seletor CSS para extrair elemento específico"),
-    javascript: z
+    useJavascript: z
         .boolean()
         .default(false)
         .describe("Renderizar JavaScript antes de extrair"),
@@ -108,6 +108,13 @@ server.tool("screenshot", "Captura screenshot de uma página web", {
         .int()
         .default(1080)
         .describe("Altura do viewport em pixels"),
+    timeout: z
+        .number()
+        .int()
+        .min(1000)
+        .max(60000)
+        .default(15000)
+        .describe("Timeout em milissegundos para carregamento da página"),
 }, async (params) => {
     const result = await screenshot(params);
     return {
@@ -121,7 +128,7 @@ server.tool("screenshot", "Captura screenshot de uma página web", {
     };
 });
 const transport = new StdioServerTransport();
-await runStartupChecks();
+runStartupChecksAsync();
 await server.connect(transport);
 process.on("SIGTERM", async () => {
     console.log("Received SIGTERM, shutting down gracefully...");

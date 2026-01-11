@@ -7,7 +7,7 @@ interface BrowserPoolStats {
 interface AcquiredBrowser {
     browser: Browser;
     page: Page;
-    release: () => void;
+    release: () => Promise<void>;
 }
 declare class BrowserPool {
     private available;
@@ -21,6 +21,9 @@ declare class BrowserPool {
     private getBrowserInstance;
     shutdown(): Promise<void>;
     getStats(): BrowserPoolStats;
+    private getOrCreatePage;
+    private setupPageSecurity;
+    private cleanPageState;
     private setupProcessCleanup;
 }
 export declare function getBrowserPool(): BrowserPool;

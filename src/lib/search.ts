@@ -344,58 +344,127 @@ async function searchSearxngPublic(
   }
 }
 
+async function raceForFirstResult(
+  providers: Array<{
+    name: string;
+    promise: Promise<SearchResult[]>;
+  }>
+): Promise<SearchResult[] | null> {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const results = new Map<string, SearchResult[]>();
+    let completedCount = 0;
+
+    providers.forEach(({ name, promise }) => {
+      promise
+        .then((result) => {
+          results.set(name, result);
+          if (!resolved && result.length > 0) {
+            resolved = true;
+            log("orchestrator", `First result from: ${name} (${result.length} results)`);
+            resolve(result);
+          }
+        })
+        .catch((error) => {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          log("orchestrator", `Provider ${name} failed: ${errorMsg}`);
+        })
+        .finally(() => {
+          completedCount++;
+          if (completedCount === providers.length && !resolved) {
+            for (const [providerName, providerResults] of results) {
+              if (providerResults.length > 0) {
+                resolved = true;
+                log("orchestrator", `Using results from: ${providerName} (${providerResults.length} results)`);
+                resolve(providerResults);
+                return;
+              }
+            }
+            resolve(null);
+          }
+        });
+    });
+  });
+}
+
 export async function searchWeb(
   query: string,
   maxResults: number = 5
 ): Promise<SearchResult[]> {
-  log("orchestrator", "Starting fallback chain...");
+  log("orchestrator", "Starting parallel search race...");
 
-  const errors: Array<{ provider: string; error: string }> = [];
+  const providers: Array<{
+    name: string;
+    promise: Promise<SearchResult[]>;
+  }> = [];
 
-  try {
-    log("orchestrator", "Step 1/4: Trying duck-duck-scrape (primary)...");
-    return await searchDuckDuckGo(query, maxResults);
-  } catch (e) {
-    const errorMsg = e instanceof Error ? e.message : String(e);
-    errors.push({ provider: "duck-duck-scrape", error: errorMsg });
-  }
+  providers.push({
+    name: "duck-duck-scrape",
+    promise: searchDuckDuckGo(query, maxResults).catch((err) => {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      logError("duck-duck-scrape", errorMsg);
+      return [];
+    })
+  });
 
-  try {
-    log("orchestrator", "Step 2/4: Trying SearXNG local (localhost:8080)...");
-    return await searchSearxngLocal(query, maxResults);
-  } catch (e) {
-    const errorMsg = e instanceof Error ? e.message : String(e);
-    errors.push({ provider: "searxng-local", error: errorMsg });
-    log("orchestrator", "Note: Docker SearXNG may not be running");
-  }
+  providers.push({
+    name: "searxng-local",
+    promise: searchSearxngLocal(query, maxResults).catch((err) => {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      logError("searxng-local", errorMsg);
+      return [];
+    })
+  });
 
   if (process.env.SCRAPER_API_KEY) {
-    try {
-      log("orchestrator", "Step 3/4: Trying ScraperAPI...");
-      return await searchScraperAPI(query, maxResults);
-    } catch (e) {
-      const errorMsg = e instanceof Error ? e.message : String(e);
-      errors.push({ provider: "scraper-api", error: errorMsg });
-    }
-  } else {
-    log("orchestrator", "Step 3/4: Skipping ScraperAPI (SCRAPER_API_KEY not configured)");
+    providers.push({
+      name: "scraper-api",
+      promise: searchScraperAPI(query, maxResults).catch((err) => {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        logError("scraper-api", errorMsg);
+        return [];
+      })
+    });
   }
 
-  log("orchestrator", `Step 4/4: Trying ${PUBLIC_SEARXNG_INSTANCES.length} public SearXNG instances...`);
+  providers.push({
+    name: "searxng-public",
+    promise: (async () => {
+      for (const instance of PUBLIC_SEARXNG_INSTANCES) {
+        try {
+          return await searchSearxngPublic(instance, query, maxResults);
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          log("searxng-public", `Instance ${instance} failed: ${errorMsg}`);
+        }
+      }
+      return [];
+    })()
+  });
 
-  for (const instance of PUBLIC_SEARXNG_INSTANCES) {
-    try {
-      return await searchSearxngPublic(instance, query, maxResults);
-    } catch (e) {
-      const errorMsg = e instanceof Error ? e.message : String(e);
-      errors.push({ provider: `searxng-public(${instance})`, error: errorMsg });
+  const raceTimeout = new Promise<SearchResult[]>((resolve) => {
+    setTimeout(() => {
+      log("orchestrator", "Race timeout reached (10s)");
+      resolve([]);
+    }, 10000);
+  });
+
+  const firstResult = await Promise.race([
+    raceForFirstResult(providers),
+    raceTimeout
+  ]);
+
+  if (firstResult && firstResult.length > 0) {
+    return firstResult;
+  }
+
+  const allResults = await Promise.all(providers.map((p) => p.promise));
+  for (const result of allResults) {
+    if (result.length > 0) {
+      log("orchestrator", "Using fallback result after race timeout");
+      return result;
     }
   }
 
-  const errorSummary = errors
-    .map((e) => `${e.provider}: ${e.error}`)
-    .join(" | ");
-  throw new Error(
-    `All search providers failed. Chain: ${errorSummary}`
-  );
+  throw new Error("All search providers failed");
 }

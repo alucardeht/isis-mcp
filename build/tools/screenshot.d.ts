@@ -10,7 +10,9 @@ interface ScreenshotResult {
     base64: string;
     width: number;
     height: number;
+    format: 'png' | 'jpeg';
     timestamp: string;
+    warning?: string;
 }
 export declare function screenshot(params: ScreenshotParams): Promise<ScreenshotResult>;
 export {};

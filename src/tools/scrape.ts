@@ -1,46 +1,77 @@
 import { scrapePage } from "../lib/scraper.js";
 import { extractContent } from "../lib/extractor.js";
 import { getFromCache, saveToCache } from "../lib/cache.js";
+import { validateUrl, truncateContent, LIMITS } from "../lib/resource-guard.js";
 import { JSDOM } from "jsdom";
 
 interface ScrapeParams {
   url: string;
   selector?: string;
-  javascript?: boolean;
+  useJavascript?: boolean;
   timeout?: number;
+  includeRawContent?: boolean;
 }
 
 interface ScrapeResult {
   url: string;
   title: string;
-  content: string;
   markdown: string;
+  content?: string;
   selectedContent?: string;
   fromCache: boolean;
   timestamp: string;
+  contentTruncated?: boolean;
+  originalLength?: number;
+  error?: string;
 }
 
 export async function scrape(params: ScrapeParams): Promise<ScrapeResult> {
-  const { url, selector, javascript = false, timeout = 30000 } = params;
+  const { url, selector, useJavascript = false, timeout = 30000, includeRawContent = false } = params;
+
+  const urlValidation = validateUrl(url);
+  if (!urlValidation.valid) {
+    return {
+      url,
+      title: '',
+      markdown: '',
+      fromCache: false,
+      timestamp: new Date().toISOString(),
+      error: `Invalid URL: ${urlValidation.error}`,
+    };
+  }
 
   const cached = await getFromCache(url);
   if (cached && !selector) {
+    const { content: truncatedMarkdown, truncated, originalLength } = truncateContent(
+      cached.markdown,
+      LIMITS.CONTENT_MAX_PER_PAGE
+    );
+
     return {
       url,
       title: cached.title,
-      content: cached.content,
-      markdown: cached.markdown,
+      markdown: truncatedMarkdown,
+      content: includeRawContent ? cached.content : undefined,
       fromCache: true,
       timestamp: new Date(cached.cached_at).toISOString(),
+      contentTruncated: truncated,
+      originalLength: truncated ? originalLength : undefined,
     };
   }
 
   try {
-    const { html } = await scrapePage(url, { javascript, timeout });
+    const { html } = await scrapePage(url, { javascript: useJavascript, timeout });
     const extracted = await extractContent(html, url);
 
     if (!extracted) {
-      throw new Error("Failed to extract content");
+      return {
+        url,
+        title: '',
+        markdown: '',
+        fromCache: false,
+        timestamp: new Date().toISOString(),
+        error: 'Failed to extract content',
+      };
     }
 
     if (!cached) {
@@ -62,17 +93,30 @@ export async function scrape(params: ScrapeParams): Promise<ScrapeResult> {
       }
     }
 
+    const { content: truncatedMarkdown, truncated, originalLength } = truncateContent(
+      extracted.markdown,
+      LIMITS.CONTENT_MAX_PER_PAGE
+    );
+
     return {
       url,
       title: extracted.title,
-      content: extracted.textContent,
-      markdown: extracted.markdown,
+      markdown: truncatedMarkdown,
+      content: includeRawContent ? extracted.textContent : undefined,
       selectedContent,
       fromCache: false,
       timestamp: new Date().toISOString(),
+      contentTruncated: truncated,
+      originalLength: truncated ? originalLength : undefined,
     };
   } catch (error) {
-    console.error("Scrape error:", error);
-    throw error;
+    return {
+      url,
+      title: '',
+      markdown: '',
+      fromCache: false,
+      timestamp: new Date().toISOString(),
+      error: `Scrape failed: ${(error as Error).message}`,
+    };
   }
 }

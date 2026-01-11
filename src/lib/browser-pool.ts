@@ -1,12 +1,19 @@
-import { chromium, Browser, Page } from "playwright";
+import { chromium, Browser, BrowserContext, Page } from "playwright";
+import * as fs from "fs";
 
-const MAX_BROWSERS = parseInt(process.env.MAX_BROWSERS ?? "3", 10);
+const MAX_BROWSERS = parseInt(process.env.MAX_BROWSERS ?? "2", 10);
 const MAX_IDLE_TIME = parseInt(process.env.MAX_IDLE_TIME ?? "30000", 10);
 const ACQUIRE_TIMEOUT = parseInt(process.env.ACQUIRE_TIMEOUT ?? "10000", 10);
+const MAX_PAGES_PER_BROWSER = 3;
+
+const isDocker =
+  process.env.DOCKER === "true" || fs.existsSync("/.dockerenv");
 
 interface BrowserInstance {
   browser: Browser;
-  page: Page;
+  context: BrowserContext;
+  availablePages: Page[];
+  inUsePages: Set<Page>;
   lastUsed: number;
   idleTimer: NodeJS.Timeout | null;
 }
@@ -20,7 +27,7 @@ interface BrowserPoolStats {
 interface AcquiredBrowser {
   browser: Browser;
   page: Page;
-  release: () => void;
+  release: () => Promise<void>;
 }
 
 class BrowserPool {
@@ -80,17 +87,34 @@ class BrowserPool {
       const request = this.acquireQueue.shift();
       if (!request) break;
 
-      const { browser, page, idleTimer } = browserInstance;
+      const page = await this.getOrCreatePage(browserInstance);
+      if (!page) {
+        request.reject(new Error("Failed to create page"));
+        continue;
+      }
+
+      const { browser, idleTimer } = browserInstance;
 
       if (idleTimer) {
         clearTimeout(idleTimer);
       }
 
-      this.available.splice(this.available.indexOf(browserInstance), 1);
-      this.inUse.add(browserInstance);
+      browserInstance.inUsePages.add(page);
 
-      const release = () => {
-        this.inUse.delete(browserInstance);
+      const release = async () => {
+        browserInstance.inUsePages.delete(page);
+
+        try {
+          await this.cleanPageState(page);
+          browserInstance.availablePages.push(page);
+        } catch (error) {
+          console.error("[BrowserPool] Error cleaning page state:", error);
+          try {
+            await page.close();
+          } catch (closeError) {
+            console.error("[BrowserPool] Error closing page:", closeError);
+          }
+        }
 
         const newIdleTimer = setTimeout(async () => {
           try {
@@ -107,10 +131,13 @@ class BrowserPool {
           }
         }, MAX_IDLE_TIME);
 
-        browserInstance.lastUsed = Date.now();
-        browserInstance.idleTimer = newIdleTimer;
+        if (browserInstance.availablePages.length === 0 && browserInstance.inUsePages.size === 0) {
+          browserInstance.lastUsed = Date.now();
+          browserInstance.idleTimer = newIdleTimer;
 
-        this.available.push(browserInstance);
+          this.available.push(browserInstance);
+        }
+
         this.processQueue();
       };
 
@@ -124,7 +151,11 @@ class BrowserPool {
 
   private async getBrowserInstance(): Promise<BrowserInstance | null> {
     if (this.available.length > 0) {
-      return this.available[0];
+      const browserInstance = this.available.shift();
+      if (browserInstance) {
+        this.inUse.add(browserInstance);
+      }
+      return browserInstance || null;
     }
 
     const totalActive = this.available.length + this.inUse.size;
@@ -133,31 +164,41 @@ class BrowserPool {
     }
 
     try {
+      const args = [
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--disable-software-rasterizer",
+        "--disable-extensions",
+      ];
+
+      if (isDocker) {
+        args.push("--no-sandbox", "--disable-setuid-sandbox");
+      }
+
       const browser = await chromium.launch({
         headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-        ],
+        args,
       });
 
-      const page = await browser.newPage({
+      const context = await browser.newContext({
         userAgent:
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
       });
 
       const browserInstance: BrowserInstance = {
         browser,
-        page,
+        context,
+        availablePages: [],
+        inUsePages: new Set(),
         lastUsed: Date.now(),
         idleTimer: null,
       };
 
       console.log(
-        `[BrowserPool] Created new browser. Total: ${totalActive + 1}/${MAX_BROWSERS}`
+        `[BrowserPool] Created new browser. Total: ${totalActive + 1}/${MAX_BROWSERS}, Docker: ${isDocker}`
       );
 
+      this.inUse.add(browserInstance);
       return browserInstance;
     } catch (error) {
       console.error("[BrowserPool] Error creating browser:", error);
@@ -175,7 +216,14 @@ class BrowserPool {
         if (browserInstance.idleTimer) {
           clearTimeout(browserInstance.idleTimer);
         }
-        await browserInstance.page.close();
+        for (const page of browserInstance.availablePages) {
+          try {
+            await page.close();
+          } catch (error) {
+            console.error("[BrowserPool] Error closing page:", error);
+          }
+        }
+        await browserInstance.context.close();
         await browserInstance.browser.close();
       } catch (error) {
         console.error("[BrowserPool] Error closing browser during shutdown:", error);
@@ -187,7 +235,21 @@ class BrowserPool {
         if (browserInstance.idleTimer) {
           clearTimeout(browserInstance.idleTimer);
         }
-        await browserInstance.page.close();
+        for (const page of browserInstance.availablePages) {
+          try {
+            await page.close();
+          } catch (error) {
+            console.error("[BrowserPool] Error closing page:", error);
+          }
+        }
+        for (const page of browserInstance.inUsePages) {
+          try {
+            await page.close();
+          } catch (error) {
+            console.error("[BrowserPool] Error closing page:", error);
+          }
+        }
+        await browserInstance.context.close();
         await browserInstance.browser.close();
       } catch (error) {
         console.error("[BrowserPool] Error closing browser during shutdown:", error);
@@ -206,6 +268,64 @@ class BrowserPool {
       available: this.available.length,
       inUse: this.inUse.size,
     };
+  }
+
+  private async getOrCreatePage(
+    browserInstance: BrowserInstance
+  ): Promise<Page | null> {
+    if (browserInstance.availablePages.length > 0) {
+      return browserInstance.availablePages.pop() || null;
+    }
+
+    if (browserInstance.inUsePages.size >= MAX_PAGES_PER_BROWSER) {
+      return null;
+    }
+
+    try {
+      const page = await browserInstance.context.newPage();
+      this.setupPageSecurity(page);
+      return page;
+    } catch (error) {
+      console.error("[BrowserPool] Error creating page:", error);
+      return null;
+    }
+  }
+
+  private setupPageSecurity(page: Page): void {
+    page.on("download", (download) => {
+      download.cancel();
+    });
+
+    page.on("dialog", async (dialog) => {
+      await dialog.dismiss().catch(() => {});
+    });
+
+    page.on("popup", (popup) => {
+      popup.close().catch(() => {});
+    });
+  }
+
+  private async cleanPageState(page: Page): Promise<void> {
+    try {
+      await page.context().clearCookies();
+    } catch (error) {
+      console.error("[BrowserPool] Error clearing cookies:", error);
+    }
+
+    try {
+      await page.evaluate(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+      });
+    } catch (error) {
+      // Ignore errors on about:blank or restricted pages
+    }
+
+    try {
+      await page.goto("about:blank", { waitUntil: "domcontentloaded" });
+    } catch (error) {
+      console.error("[BrowserPool] Error navigating to about:blank:", error);
+    }
   }
 
   private setupProcessCleanup(): void {

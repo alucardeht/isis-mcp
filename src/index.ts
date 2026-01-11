@@ -8,7 +8,7 @@ import { fetchFullContent } from "./tools/fetch.js";
 import { scrape } from "./tools/scrape.js";
 import { screenshot } from "./tools/screenshot.js";
 import { closeCache } from "./lib/cache.js";
-import { runStartupChecks } from "./lib/startup.js";
+import { runStartupChecksAsync } from "./lib/startup.js";
 
 const server = new McpServer({
   name: "isis-mcp",
@@ -92,7 +92,7 @@ server.tool(
       .string()
       .optional()
       .describe("Seletor CSS para extrair elemento específico"),
-    javascript: z
+    useJavascript: z
       .boolean()
       .default(false)
       .describe("Renderizar JavaScript antes de extrair"),
@@ -132,6 +132,13 @@ server.tool(
       .int()
       .default(1080)
       .describe("Altura do viewport em pixels"),
+    timeout: z
+      .number()
+      .int()
+      .min(1000)
+      .max(60000)
+      .default(15000)
+      .describe("Timeout em milissegundos para carregamento da página"),
   },
   async (params) => {
     const result = await screenshot(params);
@@ -149,7 +156,7 @@ server.tool(
 
 const transport = new StdioServerTransport();
 
-await runStartupChecks();
+runStartupChecksAsync();
 
 await server.connect(transport);
 

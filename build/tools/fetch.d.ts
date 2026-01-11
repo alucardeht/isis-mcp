@@ -9,7 +9,8 @@ interface FetchResult {
     text?: string;
     html?: string;
     contentLength?: number;
-    cached?: boolean;
+    fromCache?: boolean;
+    timestamp?: string;
     error?: string;
 }
 export declare function fetchFullContent(params: FetchFullContentParams): Promise<FetchResult>;

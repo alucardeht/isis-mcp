@@ -1,17 +1,21 @@
 interface ScrapeParams {
     url: string;
     selector?: string;
-    javascript?: boolean;
+    useJavascript?: boolean;
     timeout?: number;
+    includeRawContent?: boolean;
 }
 interface ScrapeResult {
     url: string;
     title: string;
-    content: string;
     markdown: string;
+    content?: string;
     selectedContent?: string;
     fromCache: boolean;
     timestamp: string;
+    contentTruncated?: boolean;
+    originalLength?: number;
+    error?: string;
 }
 export declare function scrape(params: ScrapeParams): Promise<ScrapeResult>;
 export {};
