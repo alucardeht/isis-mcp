@@ -388,6 +388,43 @@ export OLLAMA_TIMEOUT=30000                    # Default 30s
 
 \* With Ollama. Falls back to `preview` performance if unavailable.
 
+### Phase 4: Resource Management
+
+Control browser pool and memory usage to prevent system overload:
+
+#### Environment Variables
+
+Configure resource limits based on your system:
+
+```bash
+export MAX_BROWSERS=3          # Max concurrent browsers (default: 3)
+export MAX_IDLE_TIME=30000     # Browser idle timeout in ms (default: 30s)
+export MODEL_IDLE_TTL=300000   # Unload model after idle time in ms (default: 5min)
+```
+
+#### Make Configuration Permanent
+
+```bash
+echo 'export MAX_BROWSERS=3' >> ~/.zshrc
+echo 'export MAX_IDLE_TIME=30000' >> ~/.zshrc
+echo 'export MODEL_IDLE_TTL=300000' >> ~/.zshrc
+source ~/.zshrc
+```
+
+#### Recommended Values by System
+
+| System RAM | MAX_BROWSERS | MAX_IDLE_TIME | MODEL_IDLE_TTL |
+|------------|--------------|---------------|----------------|
+| 4-8GB | 2 | 20000 | 180000 |
+| 8-16GB | 3 | 30000 | 300000 |
+| 16GB+ | 4 | 60000 | 600000 |
+
+#### How It Works
+
+- **Browser Pool:** Reuses browser instances instead of creating/destroying per request
+- **Idle Cleanup:** Automatically closes idle browsers after `MAX_IDLE_TIME`
+- **LLM Unload:** Frees ~1-2GB RAM by unloading model after `MODEL_IDLE_TTL` of inactivity
+
 ### Examples
 
 **Research workflow:**

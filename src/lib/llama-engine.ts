@@ -7,6 +7,7 @@ interface LlamaEngineConfig {
   modelName?: string;
   cacheDir?: string;
   maxTokens?: number;
+  modelIdleTtl?: number;
 }
 
 export class LlamaEngine {
@@ -18,12 +19,16 @@ export class LlamaEngine {
   private maxTokens: number;
   private modelName: string;
   private isDownloading: boolean = false;
+  private modelIdleTtl: number;
+  private lastUsedAt: number = 0;
+  private unloadTimer: NodeJS.Timeout | null = null;
 
   private constructor(config: LlamaEngineConfig = {}) {
     this.modelName = config.modelName || 'Llama-3.2-1B-Instruct-Q4_K_M.gguf';
     this.cacheDir = config.cacheDir || join(homedir(), '.cache', 'isis-mcp');
     this.modelPath = join(this.cacheDir, this.modelName);
     this.maxTokens = config.maxTokens || 250;
+    this.modelIdleTtl = config.modelIdleTtl || parseInt(process.env.MODEL_IDLE_TTL || '300000');
 
     if (!existsSync(this.cacheDir)) {
       mkdirSync(this.cacheDir, { recursive: true });
@@ -94,8 +99,37 @@ export class LlamaEngine {
     }
   }
 
+  private async unloadModel(): Promise<void> {
+    if (this.model) {
+      console.log('[LlamaEngine] Unloading model due to inactivity...');
+      await this.model.dispose();
+      this.model = null;
+    }
+    if (this.llama) {
+      await this.llama.dispose();
+      this.llama = null;
+    }
+    console.log('[LlamaEngine] Model unloaded, memory freed');
+  }
+
+  private resetUnloadTimer(): void {
+    this.lastUsedAt = Date.now();
+
+    if (this.unloadTimer) {
+      clearTimeout(this.unloadTimer);
+    }
+
+    this.unloadTimer = setTimeout(async () => {
+      const idleTime = Date.now() - this.lastUsedAt;
+      if (idleTime >= this.modelIdleTtl && this.model) {
+        await this.unloadModel();
+      }
+    }, this.modelIdleTtl);
+  }
+
   private async loadModel(): Promise<LlamaModel> {
     if (this.model) {
+      this.resetUnloadTimer();
       return this.model;
     }
 
@@ -112,11 +146,13 @@ export class LlamaEngine {
       gpuLayers: 'auto',
     });
 
+    this.resetUnloadTimer();
     return this.model;
   }
 
   async summarize(content: string): Promise<string | null> {
     try {
+      this.resetUnloadTimer();
       const model = await this.loadModel();
       const context = await model.createContext();
       const sequence = context.getSequence();
@@ -152,6 +188,10 @@ export class LlamaEngine {
   }
 
   async cleanup(): Promise<void> {
+    if (this.unloadTimer) {
+      clearTimeout(this.unloadTimer);
+      this.unloadTimer = null;
+    }
     if (this.model) {
       await this.model.dispose();
       this.model = null;
@@ -161,4 +201,17 @@ export class LlamaEngine {
       this.llama = null;
     }
   }
+}
+
+export async function shutdownLlamaEngine(): Promise<void> {
+  const engine = LlamaEngine.getInstance();
+  await engine.cleanup();
+  console.log('[LlamaEngine] Shutdown complete');
+}
+
+if (typeof process !== 'undefined' && process.on) {
+  process.on('exit', () => {
+    const engine = LlamaEngine.getInstance();
+    engine.cleanup().catch((err) => console.error('[LlamaEngine] Cleanup error on exit:', err));
+  });
 }

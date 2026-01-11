@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { getBrowserPool } from '../lib/browser-pool.js';
 
 interface ScreenshotParams {
   url: string;
@@ -27,19 +27,7 @@ export async function screenshot(
     timeout = 15000,
   } = params;
 
-  let browser;
-  try {
-    browser = await chromium.launch({ headless: true });
-  } catch (error: any) {
-    throw new Error(
-      `Playwright error: ${error.message}. Run: npx playwright install chromium`
-    );
-  }
-
-  const page = await browser.newPage({
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-  });
+  const { page, release } = await getBrowserPool().acquire();
 
   try {
     await page.setViewportSize({ width, height });
@@ -64,6 +52,6 @@ export async function screenshot(
       timestamp: new Date().toISOString(),
     };
   } finally {
-    await browser.close();
+    release();
   }
 }

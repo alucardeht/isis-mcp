@@ -3,6 +3,8 @@ import { scrapePage } from "../lib/scraper.js";
 import { extractContent } from "../lib/extractor.js";
 import { getFromCache, saveToCache, generateContentHandle } from "../lib/cache.js";
 import { OllamaSummarizer } from "../lib/summarizer.js";
+import pLimit from "p-limit";
+const scrapeLimiter = pLimit(3);
 function truncateForPreview(content, maxChars = 300) {
     if (!content || content.length <= maxChars)
         return content;
@@ -44,7 +46,7 @@ export async function rag(params) {
             searchedAt: new Date().toISOString(),
         };
     }
-    const pages = await Promise.all(searchResults.map(async (result) => {
+    const pages = await Promise.all(searchResults.map((result) => scrapeLimiter(async () => {
         const cached = await getFromCache(result.url);
         if (cached) {
             return {
@@ -57,6 +59,7 @@ export async function rag(params) {
                 fromCache: true,
             };
         }
+        await new Promise((resolve) => setTimeout(resolve, 200));
         try {
             const { html } = await scrapePage(result.url, {
                 javascript: useJavascript,
@@ -84,9 +87,10 @@ export async function rag(params) {
             console.error(`Failed to scrape ${result.url}:`, e);
         }
         return null;
-    }));
+    })));
     const validPages = pages.filter(Boolean);
-    const formattedResults = await Promise.all(validPages.map(async (p) => {
+    const formattedResults = [];
+    for (const p of validPages) {
         const result = {
             url: p.url,
             title: p.title,
@@ -107,8 +111,8 @@ export async function rag(params) {
         if (p.excerpt && contentMode === "full") {
             result.excerpt = p.excerpt;
         }
-        return result;
-    }));
+        formattedResults.push(result);
+    }
     return {
         query,
         results: formattedResults,

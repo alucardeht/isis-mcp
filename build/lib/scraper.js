@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { getBrowserPool } from "./browser-pool.js";
 export async function scrapePage(url, options = {}) {
     const { javascript = false, timeout = 30000 } = options;
     if (!javascript) {
@@ -18,14 +18,10 @@ export async function scrapePage(url, options = {}) {
             throw error;
         }
     }
-    const browser = await chromium.launch();
+    const { page, release } = await getBrowserPool().acquire();
     try {
-        const page = await browser.newPage({
-            userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        });
         await page.goto(url, { waitUntil: "networkidle", timeout });
         const html = await page.content();
-        await page.close();
         return { html, status: 200 };
     }
     catch (error) {
@@ -33,7 +29,7 @@ export async function scrapePage(url, options = {}) {
         throw error;
     }
     finally {
-        await browser.close();
+        release();
     }
 }
 //# sourceMappingURL=scraper.js.map

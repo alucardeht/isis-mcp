@@ -11,11 +11,15 @@ export class LlamaEngine {
     maxTokens;
     modelName;
     isDownloading = false;
+    modelIdleTtl;
+    lastUsedAt = 0;
+    unloadTimer = null;
     constructor(config = {}) {
         this.modelName = config.modelName || 'Llama-3.2-1B-Instruct-Q4_K_M.gguf';
         this.cacheDir = config.cacheDir || join(homedir(), '.cache', 'isis-mcp');
         this.modelPath = join(this.cacheDir, this.modelName);
         this.maxTokens = config.maxTokens || 250;
+        this.modelIdleTtl = config.modelIdleTtl || parseInt(process.env.MODEL_IDLE_TTL || '300000');
         if (!existsSync(this.cacheDir)) {
             mkdirSync(this.cacheDir, { recursive: true });
         }
@@ -75,8 +79,33 @@ export class LlamaEngine {
             await this.downloadModel();
         }
     }
+    async unloadModel() {
+        if (this.model) {
+            console.log('[LlamaEngine] Unloading model due to inactivity...');
+            await this.model.dispose();
+            this.model = null;
+        }
+        if (this.llama) {
+            await this.llama.dispose();
+            this.llama = null;
+        }
+        console.log('[LlamaEngine] Model unloaded, memory freed');
+    }
+    resetUnloadTimer() {
+        this.lastUsedAt = Date.now();
+        if (this.unloadTimer) {
+            clearTimeout(this.unloadTimer);
+        }
+        this.unloadTimer = setTimeout(async () => {
+            const idleTime = Date.now() - this.lastUsedAt;
+            if (idleTime >= this.modelIdleTtl && this.model) {
+                await this.unloadModel();
+            }
+        }, this.modelIdleTtl);
+    }
     async loadModel() {
         if (this.model) {
+            this.resetUnloadTimer();
             return this.model;
         }
         await this.ensureModel();
@@ -88,10 +117,12 @@ export class LlamaEngine {
             modelPath: this.modelPath,
             gpuLayers: 'auto',
         });
+        this.resetUnloadTimer();
         return this.model;
     }
     async summarize(content) {
         try {
+            this.resetUnloadTimer();
             const model = await this.loadModel();
             const context = await model.createContext();
             const sequence = context.getSequence();
@@ -123,6 +154,10 @@ export class LlamaEngine {
         }
     }
     async cleanup() {
+        if (this.unloadTimer) {
+            clearTimeout(this.unloadTimer);
+            this.unloadTimer = null;
+        }
         if (this.model) {
             await this.model.dispose();
             this.model = null;
@@ -132,5 +167,16 @@ export class LlamaEngine {
             this.llama = null;
         }
     }
+}
+export async function shutdownLlamaEngine() {
+    const engine = LlamaEngine.getInstance();
+    await engine.cleanup();
+    console.log('[LlamaEngine] Shutdown complete');
+}
+if (typeof process !== 'undefined' && process.on) {
+    process.on('exit', () => {
+        const engine = LlamaEngine.getInstance();
+        engine.cleanup().catch((err) => console.error('[LlamaEngine] Cleanup error on exit:', err));
+    });
 }
 //# sourceMappingURL=llama-engine.js.map
