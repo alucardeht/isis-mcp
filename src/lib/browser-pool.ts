@@ -116,24 +116,32 @@ class BrowserPool {
           }
         }
 
-        const newIdleTimer = setTimeout(async () => {
-          try {
-            await browser.close();
-            const index = this.available.indexOf(browserInstance);
-            if (index !== -1) {
-              this.available.splice(index, 1);
-            }
-            console.log(
-              `[BrowserPool] Closed idle browser. Available: ${this.available.length}, InUse: ${this.inUse.size}`
-            );
-          } catch (error) {
-            console.error("[BrowserPool] Error closing idle browser:", error);
-          }
-        }, MAX_IDLE_TIME);
-
-        if (browserInstance.availablePages.length === 0 && browserInstance.inUsePages.size === 0) {
+        if (browserInstance.inUsePages.size === 0) {
+          this.inUse.delete(browserInstance);
           browserInstance.lastUsed = Date.now();
-          browserInstance.idleTimer = newIdleTimer;
+
+          if (browserInstance.idleTimer) {
+            clearTimeout(browserInstance.idleTimer);
+          }
+          browserInstance.idleTimer = setTimeout(async () => {
+            try {
+              const index = this.available.indexOf(browserInstance);
+              if (index !== -1) {
+                this.available.splice(index, 1);
+              }
+              for (const p of browserInstance.availablePages) {
+                try { await p.close(); } catch {}
+              }
+              browserInstance.availablePages = [];
+              await browserInstance.context.close();
+              await browserInstance.browser.close();
+              console.log(
+                `[BrowserPool] Closed idle browser. Available: ${this.available.length}, InUse: ${this.inUse.size}`
+              );
+            } catch (error) {
+              console.error("[BrowserPool] Error closing idle browser:", error);
+            }
+          }, MAX_IDLE_TIME);
 
           this.available.push(browserInstance);
         }

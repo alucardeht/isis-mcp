@@ -59,7 +59,7 @@ async function warmupBrowserPool(): Promise<void> {
     const { getBrowserPool } = await import("./browser-pool.js");
     const pool = getBrowserPool();
     const { release } = await pool.acquire();
-    release();
+    await release();
     console.error("[isis-mcp] Browser pool warmed up");
   } catch (error) {
     console.warn("[isis-mcp] Browser pool warmup skipped:", (error as Error).message);

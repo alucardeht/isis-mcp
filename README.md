@@ -24,13 +24,13 @@ npm install -g isis-mcp
 #### macOS/Linux
 
 ```bash
-claude mcp add --transport stdio isis-mcp -- npx -y @nicholasgriffintn/isis-mcp
+claude mcp add --transport stdio isis-mcp -- npx -y isis-mcp
 ```
 
 #### Windows
 
 ```bash
-claude mcp add --transport stdio isis-mcp -- cmd /c npx -y @nicholasgriffintn/isis-mcp
+claude mcp add --transport stdio isis-mcp -- cmd /c npx -y isis-mcp
 ```
 
 This registers the MCP in user scope (available across all projects).
