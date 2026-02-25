@@ -21,8 +21,16 @@ npm install -g isis-mcp
 
 ### Step 2: Register with Claude Code
 
+#### macOS/Linux
+
 ```bash
-claude mcp install isis-mcp -s user
+claude mcp add --transport stdio isis-mcp -- npx -y @nicholasgriffintn/isis-mcp
+```
+
+#### Windows
+
+```bash
+claude mcp add --transport stdio isis-mcp -- cmd /c npx -y @nicholasgriffintn/isis-mcp
 ```
 
 This registers the MCP in user scope (available across all projects).
@@ -55,7 +63,7 @@ docker --version
 # 4. Wait for ready state
 ```
 
-**Manual commands:**
+**Manual commands (macOS/Linux):**
 ```bash
 # Check status
 docker ps | grep isis-searxng
@@ -70,22 +78,60 @@ docker restart isis-searxng
 docker rm -f isis-searxng
 ```
 
+**Manual commands (Windows - PowerShell):**
+```powershell
+# Check status
+docker ps | Select-String isis-searxng
+
+# View logs
+docker logs isis-searxng
+
+# Restart
+docker restart isis-searxng
+
+# Remove (will auto-recreate on next use)
+docker rm -f isis-searxng
+```
+
+**Windows Docker Desktop Notes:**
+- Ensure "Start Docker Desktop when you log in" is enabled in preferences for automatic startup
+- WSL 2 backend is recommended over Hyper-V for better performance
+- If Docker takes time to start, you may see timeout errors on first RAG request—just retry after Docker is ready
+
 #### Option B: ScraperAPI (Optional - Paid Fallback)
 
 1. Create account at [ScraperAPI](https://www.scraperapi.com)
 2. Set environment variable:
 
+**macOS/Linux (Bash/Zsh):**
 ```bash
 export SCRAPER_API_KEY="your-key-here"
 ```
 
-**Make it permanent (add to ~/.zshrc or ~/.bashrc):**
+Make it permanent:
 ```bash
 echo 'export SCRAPER_API_KEY="your-key-here"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
+**Windows (CMD):**
+```cmd
+set SCRAPER_API_KEY=your-key-here
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:SCRAPER_API_KEY="your-key-here"
+```
+
+For permanent Windows configuration, use System Properties → Environment Variables or run:
+```cmd
+setx SCRAPER_API_KEY "your-key-here"
+```
+
 ### Alternative: Via Claude Code CLI (Legacy)
+
+#### macOS/Linux
 
 If you prefer npx-based installation:
 
@@ -99,7 +145,21 @@ For user-level global installation:
 claude mcp add -s user isis-mcp -- npx -y github:alucardeht/isis-mcp
 ```
 
+#### Windows
+
+```bash
+claude mcp add isis-mcp -- cmd /c npx -y github:alucardeht/isis-mcp
+```
+
+For user-level global installation:
+
+```bash
+claude mcp add -s user isis-mcp -- cmd /c npx -y github:alucardeht/isis-mcp
+```
+
 ### Manual Configuration
+
+#### macOS/Linux
 
 Add the following to your `claude_desktop_config.json`:
 
@@ -114,6 +174,21 @@ Add the following to your `claude_desktop_config.json`:
 }
 ```
 
+#### Windows
+
+Add the following to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "isis-mcp": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "github:alucardeht/isis-mcp"]
+    }
+  }
+}
+```
+
 ## Troubleshooting Installation
 
 ### "All search providers failed"
@@ -122,8 +197,16 @@ Add the following to your `claude_desktop_config.json`:
 
 **Solution:**
 1. Configure SearXNG Local (Option A) OR ScraperAPI (Option B)
-2. Verify service is running: `curl http://localhost:8080/search?q=test&format=json`
-3. If using ScraperAPI, confirm env var: `echo $SCRAPER_API_KEY`
+2. Verify service is running:
+   - macOS/Linux: `curl http://localhost:8080/search?q=test&format=json`
+   - Windows: Use Postman, curl (if installed), or PowerShell:
+     ```powershell
+     Invoke-WebRequest -Uri "http://localhost:8080/search?q=test&format=json"
+     ```
+3. If using ScraperAPI, confirm env var:
+   - macOS/Linux: `echo $SCRAPER_API_KEY`
+   - Windows CMD: `echo %SCRAPER_API_KEY%`
+   - Windows PowerShell: `$env:SCRAPER_API_KEY`
 
 ### Slow Performance
 
@@ -224,9 +307,23 @@ The server uses a modular architecture where each component can be extended inde
 
 ## Requirements
 
-- **Node.js 20+** - Required
+### All Platforms
+- **Node.js 18+** - Required
+- **Playwright Chromium** - Installed automatically
 - **Docker** (recommended) - For local SearXNG. Auto-starts on first use. Fallback providers work without Docker.
-- Playwright Chromium - Installed automatically
+
+### Platform-Specific
+
+#### macOS
+- Docker Desktop for Mac (optional, for SearXNG Local)
+
+#### Linux
+- Docker Engine (optional, for SearXNG Local)
+
+#### Windows
+- **Docker Desktop for Windows** (optional, for SearXNG Local)
+- When using Docker: Enable WSL 2 backend for best compatibility
+- If you see Playwright browser errors, run: `npx playwright install`
 
 ## Search Fallback Chain
 
@@ -316,12 +413,17 @@ Intelligent content summarization using local Ollama LLM.
 #### Setup (Optional - Zero Config)
 
 1. Install Ollama (if not already):
-```bash
-# macOS/Linux
-curl -fsSL https://ollama.ai/install.sh | sh
 
+**macOS/Linux:**
+```bash
+curl -fsSL https://ollama.ai/install.sh | sh
 # Or download from https://ollama.ai
 ```
+
+**Windows:**
+- Download installer from https://ollama.ai
+- Run the installer (Ollama.exe)
+- Ollama will start automatically and listen on http://localhost:11434
 
 2. Pull a model (recommended):
 ```bash
@@ -331,9 +433,16 @@ ollama pull mistral:7b   # Premium quality, slower (4GB)
 ```
 
 3. Start Ollama (if not running):
+
+**macOS/Linux:**
 ```bash
 ollama serve
 ```
+
+**Windows:**
+- Ollama runs as a background service after installation
+- To verify it's running, open http://localhost:11434/api/tags in your browser
+- If needed, restart from Windows Services (search "Services" in Start menu)
 
 #### Usage
 
@@ -404,11 +513,26 @@ export MODEL_IDLE_TTL=300000   # Unload model after idle time in ms (default: 5m
 
 #### Make Configuration Permanent
 
+**macOS/Linux:**
 ```bash
 echo 'export MAX_BROWSERS=3' >> ~/.zshrc
 echo 'export MAX_IDLE_TIME=30000' >> ~/.zshrc
 echo 'export MODEL_IDLE_TTL=300000' >> ~/.zshrc
 source ~/.zshrc
+```
+
+**Windows (CMD):**
+```cmd
+setx MAX_BROWSERS 3
+setx MAX_IDLE_TIME 30000
+setx MODEL_IDLE_TTL 300000
+```
+
+**Windows (PowerShell):**
+```powershell
+[Environment]::SetEnvironmentVariable("MAX_BROWSERS", "3", "User")
+[Environment]::SetEnvironmentVariable("MAX_IDLE_TIME", "30000", "User")
+[Environment]::SetEnvironmentVariable("MODEL_IDLE_TTL", "300000", "User")
 ```
 
 #### Recommended Values by System
@@ -471,7 +595,17 @@ ollama serve
 
 ### Clone and Setup
 
+**macOS/Linux:**
 ```bash
+git clone https://github.com/alucardeht/isis-mcp.git
+cd isis-mcp
+npm install
+npx playwright install chromium
+npm run build
+```
+
+**Windows (PowerShell):**
+```powershell
 git clone https://github.com/alucardeht/isis-mcp.git
 cd isis-mcp
 npm install
@@ -481,8 +615,21 @@ npm run build
 
 ### Testing
 
+**macOS/Linux:**
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node build/index.js
+```
+
+**Windows (PowerShell):**
+```powershell
+@'
+{"jsonrpc":"2.0","id":1,"method":"tools/list"}
+'@ | node build/index.js
+```
+
+**Windows (CMD):**
+```cmd
+echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | node build/index.js
 ```
 
 ### Build Output

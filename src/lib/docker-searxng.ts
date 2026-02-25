@@ -1,12 +1,38 @@
 import { exec, execSync } from "child_process";
 import { promisify } from "util";
 import { fileURLToPath } from "url";
-import { dirname } from "path";
+import { dirname, join } from "path";
+import { existsSync } from "fs";
 
 const execAsync = promisify(exec);
 const CONTAINER_NAME = "isis-searxng";
 const SEARXNG_PORT = 8080;
 const HEALTH_CHECK_TIMEOUT = 30000; // 30 segundos para container ficar ready
+
+const DEFAULT_SEARXNG_SETTINGS = `use_default_settings: true
+
+general:
+  instance_name: "ISIS-MCP SearXNG"
+
+search:
+  formats:
+    - html
+    - json
+  safe_search: 0
+  autocomplete: ""
+
+server:
+  port: 8080
+  bind_address: "0.0.0.0"
+  secret_key: "isis-mcp-local-key-12345"
+  limiter: false
+  image_proxy: false
+
+enabled_plugins: []
+
+redis:
+  url: false
+`;
 
 function log(message: string): void {
   console.warn(`[Docker] ${message}`);
@@ -39,6 +65,25 @@ async function tryStartDocker(): Promise<boolean> {
       execSync("sudo systemctl start docker", { timeout: 10000 });
       await new Promise((r) => setTimeout(r, 3000));
       return await isDockerRunning();
+    } else if (platform === "win32") {
+      log("Docker: Starting Docker Desktop...");
+      const programFiles = process.env.PROGRAMFILES || "C:\\Program Files";
+      const localAppData = process.env.LOCALAPPDATA || "";
+      const candidates = [
+        join(programFiles, "Docker", "Docker", "Docker Desktop.exe"),
+        join(localAppData, "Docker", "Docker Desktop.exe"),
+      ];
+      const dockerPath = candidates.find((p) => existsSync(p));
+      if (!dockerPath) return false;
+      try {
+        execSync(`cmd.exe /c start "" "${dockerPath}"`, { stdio: "ignore" });
+      } catch {
+        return false;
+      }
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        if (await isDockerRunning()) return true;
+      }
     }
     return false;
   } catch {
@@ -88,17 +133,33 @@ async function startExistingContainer(): Promise<boolean> {
   }
 }
 
+function toDockerPath(p: string): string {
+  return p.replace(/\\/g, "/");
+}
+
 async function createAndStartContainer(): Promise<boolean> {
   try {
     log(`Creating and starting new SearXNG container...`);
 
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
-    const projectDir = dirname(dirname(dirname(__dirname)));
-    const settingsPath = `${projectDir}/docker/searxng/settings.yml`;
+    const projectDir = dirname(dirname(__dirname));
+    const rawSettingsPath = join(projectDir, "docker", "searxng", "settings.yml");
+
+    if (!existsSync(rawSettingsPath)) {
+      log(`Settings file not found at: ${rawSettingsPath}`);
+      log(`Creating default settings...`);
+      const { mkdirSync, writeFileSync } = await import("fs");
+      const settingsDir = dirname(rawSettingsPath);
+      mkdirSync(settingsDir, { recursive: true });
+      writeFileSync(rawSettingsPath, DEFAULT_SEARXNG_SETTINGS, "utf-8");
+      log(`Default settings created at: ${rawSettingsPath}`);
+    }
+
+    const settingsPath = toDockerPath(rawSettingsPath);
 
     await execAsync(
-      `docker run -d --name ${CONTAINER_NAME} -p ${SEARXNG_PORT}:8080 -v ${settingsPath}:/etc/searxng/settings.yml:ro searxng/searxng`
+      `docker run -d --name ${CONTAINER_NAME} -p ${SEARXNG_PORT}:8080 -v "${settingsPath}":/etc/searxng/settings.yml:ro searxng/searxng`
     );
     return true;
   } catch (error) {
